@@ -1,24 +1,11 @@
-// src/lib/supabaseClient.js
-// Supabase client initialization for Vite
-
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables');
-}
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
   },
-});
-
-// Setup auth listener
-supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Auth event:', event);
 });
