@@ -1,5 +1,5 @@
 // api/verify-payment.js
-// Vercel Serverless Function - Verify Razorpay Payment
+
 
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
