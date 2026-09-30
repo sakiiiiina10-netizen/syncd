@@ -324,10 +324,12 @@ interface PaymentModalProps {
 }
 
 function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose, onSaved }: PaymentModalProps) {
+  const existingPaymentForInit = payments.find((p) => p.unit_number === initialUnit && p.year === year);
   const [selectedUnit, setSelectedUnit] = useState(initialUnit);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [fineAmount, setFineAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentAmount, setPaymentAmount] = useState(existingPaymentForInit?.amount_paid?.toString() ?? '');
+  const [fineAmount, setFineAmount] = useState(existingPaymentForInit?.fine_paid?.toString() ?? '');
+  const [paymentDate, setPaymentDate] = useState(existingPaymentForInit?.payment_date ?? new Date().toISOString().split('T')[0]);
+  const [manualStatus, setManualStatus] = useState(existingPaymentForInit?.status ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -336,6 +338,18 @@ function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose
   const unitMeta = UNITS.find((u) => u.number === selectedUnit);
   const existingPayment = payments.find((p) => p.unit_number === selectedUnit && p.year === year);
 
+  const computedStatus = (): string => {
+    if (manualStatus) return manualStatus;
+    const paid = parseFloat(paymentAmount) || 0;
+    const fine = parseFloat(fineAmount) || 0;
+    const totalExpected = unitInfo?.expected ?? 0;
+    const totalWithFine = totalExpected + fine;
+    if (totalExpected > 0 && paid >= totalWithFine) return 'paid';
+    if (paid > 0) return 'partial';
+    if (totalExpected > 0) return 'pending';
+    return 'unpaid';
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -343,12 +357,7 @@ function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose
     const paid = parseFloat(paymentAmount) || 0;
     const fine = parseFloat(fineAmount) || 0;
     const totalExpected = unitInfo?.expected ?? 0;
-    const totalWithFine = totalExpected + fine;
-
-    let status = 'pending';
-    if (paid >= totalWithFine && totalWithFine > 0) status = 'paid';
-    else if (paid > 0) status = 'partial';
-    else status = 'unpaid';
+    const status = computedStatus();
 
     const dueDate = unitInfo?.dueDate ?? getDueDateForUnit(selectedUnit, year);
 
@@ -360,7 +369,7 @@ function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose
       total_amount: totalExpected,
       fine_paid: fine,
       status,
-      payment_date: paymentDate,
+      payment_date: paid > 0 ? paymentDate : null,
       due_date: dueDate,
       subject_group: student.subject_group,
     };
@@ -403,7 +412,14 @@ function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose
             {UNITS.map((u) => (
               <button
                 key={u.number}
-                onClick={() => setSelectedUnit(u.number)}
+                onClick={() => {
+                  setSelectedUnit(u.number);
+                  const ep = payments.find((p) => p.unit_number === u.number && p.year === year);
+                  setPaymentAmount(ep?.amount_paid?.toString() ?? '');
+                  setFineAmount(ep?.fine_paid?.toString() ?? '');
+                  setPaymentDate(ep?.payment_date ?? new Date().toISOString().split('T')[0]);
+                  setManualStatus(ep?.status ?? '');
+                }}
                 className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
                   selectedUnit === u.number
                     ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300'
@@ -465,6 +481,69 @@ function PaymentModal({ student, feeSetups, payments, year, initialUnit, onClose
               onChange={(e) => setPaymentDate(e.target.value)}
               className="input"
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Fee Status (override — leave as "Auto" to calculate from amount)</label>
+            <div className="grid grid-cols-5 gap-2">
+              <button
+                type="button"
+                onClick={() => setManualStatus('')}
+                className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                  manualStatus === ''
+                    ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualStatus('paid')}
+                className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                  manualStatus === 'paid'
+                    ? 'border-green-600 bg-green-50 text-green-700 dark:border-green-500 dark:bg-green-950 dark:text-green-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                Paid
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualStatus('partial')}
+                className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                  manualStatus === 'partial'
+                    ? 'border-yellow-600 bg-yellow-50 text-yellow-700 dark:border-yellow-500 dark:bg-yellow-950 dark:text-yellow-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                Partial
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualStatus('pending')}
+                className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                  manualStatus === 'pending'
+                    ? 'border-orange-600 bg-orange-50 text-orange-700 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                Pending
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualStatus('unpaid')}
+                className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all ${
+                  manualStatus === 'unpaid'
+                    ? 'border-red-600 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-950 dark:text-red-300'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                Unpaid
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Selected: <StatusBadge status={computedStatus()} />
+            </p>
           </div>
         </div>
 
