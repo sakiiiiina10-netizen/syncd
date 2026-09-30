@@ -14,7 +14,7 @@ export default function AddStudentModal({ onClose, onSaved, editingStudent }: Ad
   const [form, setForm] = useState({
     admission_number: editingStudent?.admission_number ?? '',
     name: editingStudent?.name ?? '',
-    class: editingStudent?.class ?? 'Pre-Nursery',
+    class: editingStudent?.class ?? 'Nursery',
     section: editingStudent?.section ?? 'A',
     stream: editingStudent?.stream ?? '',
     subject_group: editingStudent?.subject_group ?? '',
