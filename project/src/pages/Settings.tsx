@@ -94,7 +94,7 @@ export default function Settings() {
             </div>
             <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
               <div className="text-xs text-gray-500">Classes</div>
-              <div className="mt-1 font-medium text-gray-900 dark:text-white">Pre-Nursery to Class 12</div>
+              <div className="mt-1 font-medium text-gray-900 dark:text-white">Nursery to Class 12</div>
             </div>
           </div>
 
