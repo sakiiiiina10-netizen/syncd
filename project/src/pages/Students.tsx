@@ -6,10 +6,12 @@ import PageHeader from '@/components/PageHeader';
 import AddStudentModal from '@/components/AddStudentModal';
 import StatusBadge from '@/components/StatusBadge';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, FeePayment, FeeSetup, AttendanceRecord } from '@/lib/types';
 import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
 
 export default function Students() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [feeSetups, setFeeSetups] = useState<FeeSetup[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -21,18 +23,20 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
+    if (!user) return;
+    const uid = user.id;
     const [studentsRes, feeRes, paymentsRes, attendanceRes] = await Promise.all([
-      supabase.from('students').select('*').order('name'),
-      supabase.from('fee_setup').select('*'),
-      supabase.from('fee_payments').select('*'),
-      supabase.from('attendance').select('*'),
+      supabase.from('students').select('*').eq('user_id', uid).order('name'),
+      supabase.from('fee_setup').select('*').eq('user_id', uid),
+      supabase.from('fee_payments').select('*').eq('user_id', uid),
+      supabase.from('attendance').select('*').eq('user_id', uid),
     ]);
     setStudents((studentsRes.data ?? []) as Student[]);
     setFeeSetups((feeRes.data ?? []) as FeeSetup[]);
     setPayments((paymentsRes.data ?? []) as FeePayment[]);
     setAttendanceRecords((attendanceRes.data ?? []) as AttendanceRecord[]);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
