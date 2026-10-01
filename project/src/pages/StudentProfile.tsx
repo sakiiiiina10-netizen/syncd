@@ -8,6 +8,7 @@ import Layout from '@/components/Layout';
 import StatusBadge from '@/components/StatusBadge';
 import AddStudentModal from '@/components/AddStudentModal';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, FeeSetup, FeePayment, AttendanceRecord } from '@/lib/types';
 import { UNITS } from '@/lib/constants';
 import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
@@ -15,6 +16,7 @@ import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [student, setStudent] = useState<Student | null>(null);
   const [feeSetups, setFeeSetups] = useState<FeeSetup[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -24,19 +26,20 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user) return;
+    const uid = user.id;
     const [studentRes, feeRes, paymentsRes, attendanceRes] = await Promise.all([
-      supabase.from('students').select('*').eq('id', id).maybeSingle(),
-      supabase.from('fee_setup').select('*'),
-      supabase.from('fee_payments').select('*').eq('student_id', id),
-      supabase.from('attendance').select('*').eq('student_id', id).order('date', { ascending: false }),
+      supabase.from('students').select('*').eq('id', id).eq('user_id', uid).maybeSingle(),
+      supabase.from('fee_setup').select('*').eq('user_id', uid),
+      supabase.from('fee_payments').select('*').eq('student_id', id).eq('user_id', uid),
+      supabase.from('attendance').select('*').eq('student_id', id).eq('user_id', uid).order('date', { ascending: false }),
     ]);
     setStudent(studentRes.data as Student | null);
     setFeeSetups((feeRes.data ?? []) as FeeSetup[]);
     setPayments((paymentsRes.data ?? []) as FeePayment[]);
     setAttendance((attendanceRes.data ?? []) as AttendanceRecord[]);
     setLoading(false);
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
