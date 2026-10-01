@@ -7,11 +7,13 @@ import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, FeeSetup, FeePayment } from '@/lib/types';
 import { UNITS } from '@/lib/constants';
 import { calculateStudentFee, getOverallFeeStatus, getDueDateForUnit } from '@/lib/feeCalc';
 
 export default function Fees() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [feeSetups, setFeeSetups] = useState<FeeSetup[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -22,16 +24,18 @@ export default function Fees() {
   const [paymentModal, setPaymentModal] = useState<{ student: Student; unit: number } | null>(null);
 
   const loadData = useCallback(async () => {
+    if (!user) return;
+    const uid = user.id;
     const [studentsRes, feeRes, paymentsRes] = await Promise.all([
-      supabase.from('students').select('*').order('name'),
-      supabase.from('fee_setup').select('*'),
-      supabase.from('fee_payments').select('*'),
+      supabase.from('students').select('*').eq('user_id', uid).order('name'),
+      supabase.from('fee_setup').select('*').eq('user_id', uid),
+      supabase.from('fee_payments').select('*').eq('user_id', uid),
     ]);
     setStudents((studentsRes.data ?? []) as Student[]);
     setFeeSetups((feeRes.data ?? []) as FeeSetup[]);
     setPayments((paymentsRes.data ?? []) as FeePayment[]);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
