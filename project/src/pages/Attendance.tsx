@@ -8,11 +8,13 @@ import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, AttendanceRecord } from '@/lib/types';
 
 type Status = 'present' | 'absent' | 'leave';
 
 export default function Attendance() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -24,13 +26,15 @@ export default function Attendance() {
   const existingRecordsRef = useRef<Record<string, AttendanceRecord>>({});
 
   const loadStudents = useCallback(async () => {
-    const { data } = await supabase.from('students').select('*').order('name');
+    if (!user) return;
+    const { data } = await supabase.from('students').select('*').eq('user_id', user.id).order('name');
     setStudents((data ?? []) as Student[]);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   const loadAttendance = useCallback(async (selectedDate: string) => {
-    const { data } = await supabase.from('attendance').select('*').eq('date', selectedDate);
+    if (!user) return;
+    const { data } = await supabase.from('attendance').select('*').eq('date', selectedDate).eq('user_id', user.id);
     const map: Record<string, AttendanceRecord> = {};
     const statusMap: Record<string, Status> = {};
     (data ?? []).forEach((r: AttendanceRecord) => {
@@ -40,7 +44,7 @@ export default function Attendance() {
     setExistingRecords(map);
     existingRecordsRef.current = map;
     setAttendanceMap(statusMap);
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadStudents(); }, [loadStudents]);
   useEffect(() => { loadAttendance(date); }, [date, loadAttendance]);
