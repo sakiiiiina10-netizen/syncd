@@ -8,12 +8,14 @@ import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, FeeSetup, FeePayment, AttendanceRecord } from '@/lib/types';
 import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
 
 type Tab = 'attendance' | 'student' | 'fees';
 
 export default function Reports() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('attendance');
   const [students, setStudents] = useState<Student[]>([]);
   const [feeSetups, setFeeSetups] = useState<FeeSetup[]>([]);
@@ -22,12 +24,14 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
+    const uid = user.id;
     (async () => {
       const [s, fs, p, a] = await Promise.all([
-        supabase.from('students').select('*').order('name'),
-        supabase.from('fee_setup').select('*'),
-        supabase.from('fee_payments').select('*'),
-        supabase.from('attendance').select('*'),
+        supabase.from('students').select('*').eq('user_id', uid).order('name'),
+        supabase.from('fee_setup').select('*').eq('user_id', uid),
+        supabase.from('fee_payments').select('*').eq('user_id', uid),
+        supabase.from('attendance').select('*').eq('user_id', uid),
       ]);
       setStudents((s.data ?? []) as Student[]);
       setFeeSetups((fs.data ?? []) as FeeSetup[]);
@@ -35,7 +39,7 @@ export default function Reports() {
       setAttendance((a.data ?? []) as AttendanceRecord[]);
       setLoading(false);
     })();
-  }, []);
+  }, [user]);
 
   const year = new Date().getFullYear();
 
