@@ -6,72 +6,36 @@ import {
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { Student, FeeSetup, FeePayment, AttendanceRecord } from '@/lib/types';
 import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
 import { CLASSES } from '@/lib/constants';
 
 export default function Analytics() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [feeSetups, setFeeSetups] = useState<FeeSetup[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
+    if (!user) return;
+    const uid = user.id;
     (async () => {
-      try {
-        // 1. CRITICAL SECURITY GUARD: Verify the current user session explicitly before query invocation.
-        // This ensures the Authorization header is actively attached to the network pool.
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError || !user) {
-          if (isMounted) {
-            setAuthError(true);
-            setLoading(false);
-          }
-          return;
-        }
-
-        // 2. DATA FETHING: Scoped request execution.
-        // If your database Row Level Security (RLS) policies are active, select('*') will naturally 
-        // filter data according to the current authenticated token.
-        //
-        // PRO TIP (Defense-in-Depth): If you are still seeing cross-tenant leaks due to custom or missing 
-        // policies, explicitly append a user or school restriction filter directly here in the frontend:
-        // .eq('user_id', user.id) OR .eq('school_id', user.user_metadata?.school_id)
-        const [s, fs, p, a] = await Promise.all([
-          supabase.from('students').select('*'),
-          supabase.from('fee_setup').select('*'),
-          supabase.from('fee_payments').select('*'),
-          supabase.from('attendance').select('*'),
-        ]);
-
-        if (isMounted) {
-          // Log underlying schema warnings or policy constraints to console for diagnostic transparency
-          if (s.error) console.error('Students fetch exception:', s.error.message);
-          if (fs.error) console.error('Fee Setup fetch exception:', fs.error.message);
-          if (p.error) console.error('Fee Payments fetch exception:', p.error.message);
-          if (a.error) console.error('Attendance fetch exception:', a.error.message);
-
-          setStudents((s.data ?? []) as Student[]);
-          setFeeSetups((fs.data ?? []) as FeeSetup[]);
-          setPayments((p.data ?? []) as FeePayment[]);
-          setAttendance((a.data ?? []) as AttendanceRecord[]);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Analytics runtime compilation crash:', err);
-        if (isMounted) setLoading(false);
-      }
+      const [s, fs, p, a] = await Promise.all([
+        supabase.from('students').select('*').eq('user_id', uid),
+        supabase.from('fee_setup').select('*').eq('user_id', uid),
+        supabase.from('fee_payments').select('*').eq('user_id', uid),
+        supabase.from('attendance').select('*').eq('user_id', uid),
+      ]);
+      setStudents((s.data ?? []) as Student[]);
+      setFeeSetups((fs.data ?? []) as FeeSetup[]);
+      setPayments((p.data ?? []) as FeePayment[]);
+      setAttendance((a.data ?? []) as AttendanceRecord[]);
+      setLoading(false);
     })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [user]);
 
   const year = new Date().getFullYear();
 
@@ -135,19 +99,6 @@ export default function Analytics() {
       <Layout>
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-        </div>
-      </Layout>
-    );
-  }
-
-  if (authError) {
-    return (
-      <Layout>
-        <div className="flex min-h-[400px] flex-col items-center justify-center text-center p-6">
-          <div className="text-red-500 font-semibold mb-2">Session De-authenticated</div>
-          <p className="text-sm text-gray-500 max-w-sm">
-            Please log out completely and clear local browser memory to rebuild an isolated security session.
-          </p>
         </div>
       </Layout>
     );
