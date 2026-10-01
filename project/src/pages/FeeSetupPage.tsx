@@ -3,6 +3,7 @@ import { Save, AlertCircle, Settings as SettingsIcon } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { FEE_GROUPS, FEE_CATEGORIES, UNITS } from '@/lib/constants';
 import { FeeSetup } from '@/lib/types';
 
@@ -25,6 +26,7 @@ function rowKey(r: { fee_group: string; fee_category: string; unit_number: numbe
 }
 
 export default function FeeSetupPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [fields, setFields] = useState<Record<string, FieldValues>>({});
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,8 @@ export default function FeeSetupPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadSetups = useCallback(async () => {
-    const { data } = await supabase.from('fee_setup').select('*');
+    if (!user) return;
+    const { data } = await supabase.from('fee_setup').select('*').eq('user_id', user.id);
     const existingSetups = (data ?? []) as FeeSetup[];
 
     const newRows: SetupRow[] = [];
@@ -67,7 +70,7 @@ export default function FeeSetupPage() {
     setRows(newRows);
     setFields(newFields);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadSetups(); }, [loadSetups]);
 
