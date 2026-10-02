@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Search, Wallet, Check, AlertCircle, Settings, Eye, Calendar,
+  Search, Wallet, Check, AlertCircle, Settings, Eye, Calendar, Filter,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
@@ -19,6 +19,8 @@ export default function Fees() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [detailModal, setDetailModal] = useState<Student | null>(null);
   const [paymentModal, setPaymentModal] = useState<{ student: Student; unit: number } | null>(null);
@@ -53,6 +55,14 @@ export default function Fees() {
     });
   }, [students, feeSetups, payments, year]);
 
+  const classOptions = useMemo(() =>
+    [...new Set(students.map((s) => s.class))].sort(), [students]
+  );
+  const sectionOptions = useMemo(() =>
+    [...new Set(students.filter((s) => !classFilter || s.class === classFilter).map((s) => s.section))].sort(),
+    [students, classFilter]
+  );
+
   const filtered = enrichedStudents.filter((s) => {
     const q = search.toLowerCase();
     const matchesSearch = s.name.toLowerCase().includes(q) ||
@@ -60,12 +70,14 @@ export default function Fees() {
       (s.email ?? '').toLowerCase().includes(q) ||
       (s.phone_number ?? '').includes(q);
     const matchesStatus = !statusFilter || s.fee_status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesClass = !classFilter || s.class === classFilter;
+    const matchesSection = !sectionFilter || s.section === sectionFilter;
+    return matchesSearch && matchesStatus && matchesClass && matchesSection;
   });
 
-  const totalCollected = enrichedStudents.reduce((sum, s) => sum + s.feeData.totalPaid, 0);
-  const totalPending = enrichedStudents.reduce((sum, s) => sum + s.feeData.totalPending, 0);
-  const totalExpected = enrichedStudents.reduce((sum, s) => sum + s.feeData.totalExpected, 0);
+  const totalCollected = filtered.reduce((sum, s) => sum + s.feeData.totalPaid, 0);
+  const totalPending = filtered.reduce((sum, s) => sum + s.feeData.totalPending, 0);
+  const totalExpected = filtered.reduce((sum, s) => sum + s.feeData.totalExpected, 0);
 
   return (
     <Layout>
@@ -104,7 +116,7 @@ export default function Fees() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -115,10 +127,30 @@ export default function Fees() {
             className="input pl-10"
           />
         </div>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={classFilter}
+            onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+            className="input min-w-[140px]"
+          >
+            <option value="">All Classes</option>
+            {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            className="input min-w-[100px]"
+            disabled={!classFilter}
+          >
+            <option value="">All Sections</option>
+            {sectionOptions.map((s) => <option key={s} value={s}>Section {s}</option>)}
+          </select>
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="input max-w-[180px]"
+          className="input min-w-[120px]"
         >
           <option value="">All Status</option>
           <option value="paid">Paid</option>
@@ -126,6 +158,14 @@ export default function Fees() {
           <option value="pending">Pending</option>
           <option value="unpaid">Unpaid</option>
         </select>
+        {(classFilter || sectionFilter || statusFilter) && (
+          <button
+            onClick={() => { setClassFilter(''); setSectionFilter(''); setStatusFilter(''); }}
+            className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {loading ? (
