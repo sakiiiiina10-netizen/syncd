@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
   Users, ClipboardCheck, Wallet, TrendingUp, ArrowRight,
-  UserCheck, UserX, Calendar, Activity,
+  UserCheck, UserX, Calendar, Activity, Filter,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
@@ -31,6 +31,11 @@ export default function Dashboard() {
   const [recentActivity, setRecentActivity] = useState<Array<{ id: string; text: string; time: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
+  const [classOptions, setClassOptions] = useState<string[]>([]);
+  const [sectionOptions, setSectionOptions] = useState<string[]>([]);
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
 
   const loadDashboard = useCallback(async () => {
     if (!user) return;
@@ -47,18 +52,28 @@ export default function Dashboard() {
     const todayAttendance = (attendanceRes.data ?? []) as AttendanceRecord[];
     const payments = (paymentsRes.data ?? []) as FeePayment[];
 
-    const presentToday = todayAttendance.filter((a) => a.status === 'present').length;
-    const absentToday = todayAttendance.filter((a) => a.status === 'absent').length;
-    const totalMarked = todayAttendance.length;
+    setAllStudents(students);
+    setClassOptions([...new Set(students.map((s) => s.class))].sort());
+
+    const filteredStudents = students.filter((s) =>
+      (!classFilter || s.class === classFilter) && (!sectionFilter || s.section === sectionFilter)
+    );
+    const filteredStudentIds = new Set(filteredStudents.map((s) => s.id));
+    const todayAttFiltered = todayAttendance.filter((a) => filteredStudentIds.has(a.student_id));
+    const paymentsFiltered = payments.filter((p) => filteredStudentIds.has(p.student_id));
+
+    const presentToday = todayAttFiltered.filter((a) => a.status === 'present').length;
+    const absentToday = todayAttFiltered.filter((a) => a.status === 'absent').length;
+    const totalMarked = todayAttFiltered.length;
     const attendancePercentage = totalMarked > 0
       ? Math.round((presentToday / totalMarked) * 100)
       : 0;
 
-    const totalCollected = payments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-    const totalPending = payments.reduce((sum, p) => sum + (p.total_amount - p.amount_paid || 0), 0);
+    const totalCollected = paymentsFiltered.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
+    const totalPending = paymentsFiltered.reduce((sum, p) => sum + (p.total_amount - p.amount_paid || 0), 0);
 
     setStats({
-      totalStudents: students.length,
+      totalStudents: filteredStudents.length,
       presentToday,
       absentToday,
       attendancePercentage,
@@ -79,17 +94,18 @@ export default function Dashboard() {
       const dateStr = d.toISOString().split('T')[0];
       const dayAttendance = await supabase.from('attendance').select('*').eq('date', dateStr).eq('user_id', uid);
       const records = (dayAttendance.data ?? []) as AttendanceRecord[];
+      const dayFiltered = records.filter((r) => filteredStudentIds.has(r.student_id));
       weekData.push({
         day: d.toLocaleDateString('en', { weekday: 'short' }),
-        present: records.filter((r) => r.status === 'present').length,
-        absent: records.filter((r) => r.status === 'absent').length,
-        leave: records.filter((r) => r.status === 'leave').length,
+        present: dayFiltered.filter((r) => r.status === 'present').length,
+        absent: dayFiltered.filter((r) => r.status === 'absent').length,
+        leave: dayFiltered.filter((r) => r.status === 'leave').length,
       });
     }
     setAttendanceWeek(weekData);
 
     // Recent activity
-    const sorted = [...students].sort((a, b) =>
+    const sorted = [...filteredStudents].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     ).slice(0, 5);
     setRecentActivity(sorted.map((s) => ({
@@ -100,9 +116,13 @@ export default function Dashboard() {
 
     setLoading(false);
     setRefreshing(false);
-  }, [user]);
+  }, [user, classFilter, sectionFilter]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  useEffect(() => {
+    setSectionOptions([...new Set(allStudents.filter((s) => !classFilter || s.class === classFilter).map((s) => s.section))].sort());
+  }, [allStudents, classFilter]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -148,9 +168,31 @@ export default function Dashboard() {
         title="Dashboard"
         subtitle="Overview of your school's performance"
         action={
-          <button onClick={handleRefresh} className="btn-secondary" disabled={refreshing}>
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <select
+                value={classFilter}
+                onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+                className="input min-w-[120px]"
+              >
+                <option value="">All Classes</option>
+                {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}
+                className="input min-w-[90px]"
+                disabled={!classFilter}
+              >
+                <option value="">All Sections</option>
+                {sectionOptions.map((s) => <option key={s} value={s}>Sec {s}</option>)}
+              </select>
+            </div>
+            <button onClick={handleRefresh} className="btn-secondary" disabled={refreshing}>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         }
       />
 
