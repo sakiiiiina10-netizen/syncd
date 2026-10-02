@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Eye, Pencil, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, AlertCircle, Filter } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import AddStudentModal from '@/components/AddStudentModal';
@@ -17,6 +17,8 @@ export default function Students() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [search, setSearch] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -60,14 +62,29 @@ export default function Students() {
     });
   }, [students, feeSetups, payments, attendanceRecords, year]);
 
+  const classOptions = useMemo(() =>
+    [...new Set(students.map((s) => s.class))].sort(),
+    [students]
+  );
+
+  const sectionOptions = useMemo(() =>
+    [...new Set(
+      students
+        .filter((s) => !classFilter || s.class === classFilter)
+        .map((s) => s.section)
+    )].sort(),
+    [students, classFilter]
+  );
+
   const filtered = enrichedStudents.filter((s) => {
     const q = search.toLowerCase();
-    return (
-      s.name.toLowerCase().includes(q) ||
+    const matchesSearch = s.name.toLowerCase().includes(q) ||
       s.admission_number.toLowerCase().includes(q) ||
       (s.email ?? '').toLowerCase().includes(q) ||
-      (s.phone_number ?? '').includes(q)
-    );
+      (s.phone_number ?? '').includes(q);
+    const matchesClass = !classFilter || s.class === classFilter;
+    const matchesSection = !sectionFilter || s.section === sectionFilter;
+    return matchesSearch && matchesClass && matchesSection;
   });
 
   const handleDelete = async () => {
@@ -81,7 +98,7 @@ export default function Students() {
     <Layout>
       <PageHeader
         title="Students"
-        subtitle={`${students.length} students enrolled`}
+subtitle={`${filtered.length} of ${students.length} students${classFilter ? ` — ${classFilter}${sectionFilter ? ` (Section ${sectionFilter})` : ''}` : ''}`}
         action={
           <button onClick={() => { setEditingStudent(null); setShowModal(true); }} className="btn-primary">
             <Plus className="h-4 w-4" />
@@ -90,15 +107,45 @@ export default function Students() {
         }
       />
 
-      <div className="mb-4 relative max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, roll number, email, phone..."
-          className="input pl-10"
-        />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, roll number, email, phone..."
+            className="input pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={classFilter}
+            onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+            className="input min-w-[140px]"
+          >
+            <option value="">All Classes</option>
+            {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            className="input min-w-[100px]"
+            disabled={!classFilter}
+          >
+            <option value="">All Sections</option>
+            {sectionOptions.map((s) => <option key={s} value={s}>Section {s}</option>)}
+          </select>
+          {(classFilter || sectionFilter) && (
+            <button
+              onClick={() => { setClassFilter(''); setSectionFilter(''); }}
+              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
