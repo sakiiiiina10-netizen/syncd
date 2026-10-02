@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Student, FeeSetup, FeePayment, AttendanceRecord } from '@/lib/types';
 import { calculateStudentFee, getOverallFeeStatus } from '@/lib/feeCalc';
 import { CLASSES } from '@/lib/constants';
+import { Filter } from 'lucide-react';
 
 export default function Analytics() {
   const { user } = useAuth();
@@ -18,6 +19,8 @@ export default function Analytics() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -39,25 +42,41 @@ export default function Analytics() {
 
   const year = new Date().getFullYear();
 
+  const classOptions = useMemo(() => [...new Set(students.map((s) => s.class))].sort(), [students]);
+  const sectionOptions = useMemo(() =>
+    [...new Set(students.filter((s) => !classFilter || s.class === classFilter).map((s) => s.section))].sort(),
+    [students, classFilter]
+  );
+
+  const filteredStudents = useMemo(() =>
+    students.filter((s) => (!classFilter || s.class === classFilter) && (!sectionFilter || s.section === sectionFilter)),
+    [students, classFilter, sectionFilter]
+  );
+
   const data = useMemo(() => {
-    const presentCount = attendance.filter((a) => a.status === 'present').length;
-    const absentCount = attendance.filter((a) => a.status === 'absent').length;
-    const leaveCount = attendance.filter((a) => a.status === 'leave').length;
-    const attendancePct = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 0;
+    const filteredStudentIds = new Set(filteredStudents.map((s) => s.id));
+    const filteredAttendance = attendance.filter((a) => filteredStudentIds.has(a.student_id));
+    const filteredPayments = payments.filter((p) => filteredStudentIds.has(p.student_id));
 
-    const totalCollected = payments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
-    const totalPending = payments.reduce((sum, p) => sum + (p.total_amount - p.amount_paid || 0), 0);
+    const presentCount = filteredAttendance.filter((a) => a.status === 'present').length;
+    const absentCount = filteredAttendance.filter((a) => a.status === 'absent').length;
+    const leaveCount = filteredAttendance.filter((a) => a.status === 'leave').length;
+    const attendancePct = filteredAttendance.length > 0 ? Math.round((presentCount / filteredAttendance.length) * 100) : 0;
 
-    // Students per class
+    const totalCollected = filteredPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
+    const totalPending = filteredPayments.reduce((sum, p) => sum + (p.total_amount - p.amount_paid || 0), 0);
+
+    // Students per class (respect class filter — show only selected or all)
+    const studentsForChart = classFilter ? filteredStudents : students;
     const studentsPerClass = CLASSES.map((c) => ({
       class: c.replace('Class ', 'C').replace('Pre-Nursery', 'PN').replace('Nursery', 'N'),
-      count: students.filter((s) => s.class === c).length,
+      count: studentsForChart.filter((s) => s.class === c).length,
     })).filter((d) => d.count > 0);
 
     // Fee status counts
     const feeStatusCounts = { paid: 0, partial: 0, pending: 0, unpaid: 0 };
-    students.forEach((s) => {
-      const sPayments = payments.filter((p) => p.student_id === s.id);
+    filteredStudents.forEach((s) => {
+      const sPayments = filteredPayments.filter((p) => p.student_id === s.id);
       const feeData = calculateStudentFee(s, feeSetups, sPayments, year);
       const status = getOverallFeeStatus(feeData);
       feeStatusCounts[status as keyof typeof feeStatusCounts]++;
@@ -69,7 +88,7 @@ export default function Analytics() {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      const dayAtt = attendance.filter((a) => a.date === dateStr);
+      const dayAtt = filteredAttendance.filter((a) => a.date === dateStr);
       const dayPresent = dayAtt.filter((a) => a.status === 'present').length;
       const pct = dayAtt.length > 0 ? Math.round((dayPresent / dayAtt.length) * 100) : 0;
       trend.push({ day: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), attendance: pct });
@@ -79,7 +98,7 @@ export default function Analytics() {
       presentCount, absentCount, leaveCount, attendancePct,
       totalCollected, totalPending, studentsPerClass, feeStatusCounts, trend,
     };
-  }, [students, feeSetups, payments, attendance, year]);
+  }, [students, feeSetups, payments, attendance, year, filteredStudents]);
 
   const attendancePie = [
     { name: 'Present', value: data.presentCount, fill: '#22c55e' },
@@ -108,11 +127,40 @@ export default function Analytics() {
     <Layout>
       <PageHeader title="Analytics" subtitle="Visual analytics for attendance, students, and fees" />
 
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Filter className="h-4 w-4 text-gray-400" />
+        <select
+          value={classFilter}
+          onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+          className="input min-w-[140px]"
+        >
+          <option value="">All Classes</option>
+          {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select
+          value={sectionFilter}
+          onChange={(e) => setSectionFilter(e.target.value)}
+          className="input min-w-[100px]"
+          disabled={!classFilter}
+        >
+          <option value="">All Sections</option>
+          {sectionOptions.map((s) => <option key={s} value={s}>Section {s}</option>)}
+        </select>
+        {(classFilter || sectionFilter) && (
+          <button
+            onClick={() => { setClassFilter(''); setSectionFilter(''); }}
+            className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {/* Summary stats */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card p-5">
           <div className="text-xs text-gray-500">Total Students</div>
-          <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{students.length}</div>
+          <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{filteredStudents.length}</div>
         </div>
         <div className="card p-5">
           <div className="text-xs text-gray-500">Attendance Rate</div>
