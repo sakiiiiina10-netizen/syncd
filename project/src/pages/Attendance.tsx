@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { Search, Calendar, Check, X, Clock } from 'lucide-react';
+import { Search, Calendar, Check, X, Clock, Filter } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -19,6 +19,7 @@ export default function Attendance() {
   const [search, setSearch] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
   const [attendanceMap, setAttendanceMap] = useState<Record<string, Status>>({});
   const [existingRecords, setExistingRecords] = useState<Record<string, AttendanceRecord>>({});
   const [loading, setLoading] = useState(true);
@@ -86,7 +87,8 @@ export default function Attendance() {
       (s.email ?? '').toLowerCase().includes(q) ||
       (s.phone_number ?? '').includes(q);
     const matchesClass = !classFilter || s.class === classFilter;
-    return matchesSearch && matchesClass;
+    const matchesSection = !sectionFilter || s.section === sectionFilter;
+    return matchesSearch && matchesClass && matchesSection;
   });
 
   const presentCount = Object.values(attendanceMap).filter((s) => s === 'present').length;
@@ -108,6 +110,9 @@ export default function Attendance() {
   ];
 
   const classOptions = [...new Set(students.map((s) => s.class))].sort();
+  const sectionOptions = [...new Set(
+    students.filter((s) => !classFilter || s.class === classFilter).map((s) => s.section)
+  )].sort();
 
   return (
     <Layout>
@@ -143,14 +148,34 @@ export default function Attendance() {
             className="input pl-10"
           />
         </div>
-        <select
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-          className="input max-w-[180px]"
-        >
-          <option value="">All Classes</option>
-          {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={classFilter}
+            onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+            className="input min-w-[140px]"
+          >
+            <option value="">All Classes</option>
+            {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            className="input min-w-[100px]"
+            disabled={!classFilter}
+          >
+            <option value="">All Sections</option>
+            {sectionOptions.map((s) => <option key={s} value={s}>Section {s}</option>)}
+          </select>
+          {(classFilter || sectionFilter) && (
+            <button
+              onClick={() => { setClassFilter(''); setSectionFilter(''); }}
+              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
