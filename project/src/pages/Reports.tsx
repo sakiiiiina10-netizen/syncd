@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { FileText, ClipboardCheck, Users, Wallet } from 'lucide-react';
+import { FileText, ClipboardCheck, Users, Wallet, Filter } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -22,6 +22,8 @@ export default function Reports() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [classFilter, setClassFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -43,18 +45,33 @@ export default function Reports() {
 
   const year = new Date().getFullYear();
 
+  const classOptions = useMemo(() => [...new Set(students.map((s) => s.class))].sort(), [students]);
+  const sectionOptions = useMemo(() =>
+    [...new Set(students.filter((s) => !classFilter || s.class === classFilter).map((s) => s.section))].sort(),
+    [students, classFilter]
+  );
+
+  const filteredStudents = useMemo(() =>
+    students.filter((s) => (!classFilter || s.class === classFilter) && (!sectionFilter || s.section === sectionFilter)),
+    [students, classFilter, sectionFilter]
+  );
+
   const reportData = useMemo(() => {
-    const totalAttendance = attendance.length;
-    const presentCount = attendance.filter((a) => a.status === 'present').length;
-    const absentCount = attendance.filter((a) => a.status === 'absent').length;
-    const leaveCount = attendance.filter((a) => a.status === 'leave').length;
+    const filteredStudentIds = new Set(filteredStudents.map((s) => s.id));
+    const filteredAttendance = attendance.filter((a) => filteredStudentIds.has(a.student_id));
+    const filteredPayments = payments.filter((p) => filteredStudentIds.has(p.student_id));
+
+    const totalAttendance = filteredAttendance.length;
+    const presentCount = filteredAttendance.filter((a) => a.status === 'present').length;
+    const absentCount = filteredAttendance.filter((a) => a.status === 'absent').length;
+    const leaveCount = filteredAttendance.filter((a) => a.status === 'leave').length;
     const attendancePct = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
 
-    const studentRows = students.map((s) => {
-      const sAttendance = attendance.filter((a) => a.student_id === s.id);
+    const studentRows = filteredStudents.map((s) => {
+      const sAttendance = filteredAttendance.filter((a) => a.student_id === s.id);
       const sPresent = sAttendance.filter((a) => a.status === 'present').length;
       const sPct = sAttendance.length > 0 ? Math.round((sPresent / sAttendance.length) * 100) : 0;
-      const sPayments = payments.filter((p) => p.student_id === s.id);
+      const sPayments = filteredPayments.filter((p) => p.student_id === s.id);
       const feeData = calculateStudentFee(s, feeSetups, sPayments, year);
       return {
         ...s,
@@ -64,7 +81,7 @@ export default function Reports() {
       };
     });
 
-    const totalCollected = payments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
+    const totalCollected = filteredPayments.reduce((sum, p) => sum + (p.amount_paid || 0), 0);
     const totalExpected = studentRows.reduce((sum, s) => sum + s.feeData.totalExpected, 0);
     const totalPending = studentRows.reduce((sum, s) => sum + s.feeData.totalPending, 0);
     const feeStatusCounts = {
@@ -79,7 +96,7 @@ export default function Reports() {
       totalAttendance, presentCount, absentCount, leaveCount, attendancePct,
       studentRows, totalCollected, totalExpected, totalPending, feeStatusCounts,
     };
-  }, [students, feeSetups, payments, attendance, year]);
+  }, [students, feeSetups, payments, attendance, year, filteredStudents]);
 
   const attendancePie = [
     { name: 'Present', value: reportData.presentCount, fill: '#22c55e' },
@@ -111,6 +128,35 @@ export default function Reports() {
   return (
     <Layout>
       <PageHeader title="Reports" subtitle="Comprehensive reports for attendance, students, and fees" />
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Filter className="h-4 w-4 text-gray-400" />
+        <select
+          value={classFilter}
+          onChange={(e) => { setClassFilter(e.target.value); setSectionFilter(''); }}
+          className="input min-w-[140px]"
+        >
+          <option value="">All Classes</option>
+          {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select
+          value={sectionFilter}
+          onChange={(e) => setSectionFilter(e.target.value)}
+          className="input min-w-[100px]"
+          disabled={!classFilter}
+        >
+          <option value="">All Sections</option>
+          {sectionOptions.map((s) => <option key={s} value={s}>Section {s}</option>)}
+        </select>
+        {(classFilter || sectionFilter) && (
+          <button
+            onClick={() => { setClassFilter(''); setSectionFilter(''); }}
+            className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
       <div className="mb-6 flex gap-2 border-b border-gray-200 dark:border-gray-800">
         {tabs.map((t) => (
